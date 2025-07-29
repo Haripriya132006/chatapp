@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel,create_engine,Session
-DB_URL="sqlite:///.chat.db"
+DB_URL = "postgresql://postgres:vanihari123@db.qyvutnzcczunupmukaej.supabase.co:5432/postgres"
 engine=create_engine(DB_URL,echo=True)
 
 def get_session():
