@@ -72,6 +72,10 @@ async def chat_ws(websocket:WebSocket,username:str,session:Session=Depends(get_s
     except WebSocketDisconnect:
         del active_connections[username]
 
+@app.get("/")
+def root():
+    return {"status": "ChatApp API is running"}
+
 @app.get("/history/{user1}/{user2}")
 def det_history(user1:str,user2:str,session:Session=Depends(get_session)):
     stmt=select(Message).where(
