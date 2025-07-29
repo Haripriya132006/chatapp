@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:8000';
-
+const BASE_URL = "https://chatapp-backend.onrender.com";
 function Signin({ goToLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
