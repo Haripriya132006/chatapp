@@ -18,10 +18,12 @@ function Signin({ goToLogin }) {
 
     try {
       await axios.post(`${BASE_URL}/signup`, {
-        username,
-        password,
-        question,
-        answer
+      username,
+      password,
+      security_question: question,
+      security_answer: answer
+    );
+
       });
       alert('Signup successful! You can now log in.');
       goToLogin();
