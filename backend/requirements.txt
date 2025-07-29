@@ -3,3 +3,4 @@ uvicorn
 sqlmodel
 aiosqlite
 bcrypt
+psycopg2-binary
