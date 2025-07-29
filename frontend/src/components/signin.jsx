@@ -22,7 +22,6 @@ function Signin({ goToLogin }) {
       password,
       security_question: question,
       security_answer: answer
-    );
 
       });
       alert('Signup successful! You can now log in.');
