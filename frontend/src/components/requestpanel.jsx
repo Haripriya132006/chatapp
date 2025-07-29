@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const BASE_URL = "https://chatapp-backend.onrender.com";
+const BASE_URL = "https://chatapp-yc2g.onrender.com/";
+
 function RequestPanel({ currentUser, setChatPartner, setUserName }) {
   const [allowedUsers, setAllowedUsers] = useState([]);
   const [blockedUsers, setBlockedUsers] = useState([]);
