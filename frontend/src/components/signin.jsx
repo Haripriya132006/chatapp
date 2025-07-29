@@ -10,26 +10,31 @@ function Signin({ goToLogin }) {
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState('');
 
-  const handleSignup = async () => {
-    if (!username || !password || !question || !answer) {
-      setError("All fields are required.");
-      return;
-    }
+const handleSignup = async () => {
+  if (!username || !password || !question || !answer) {
+    setError("All fields are required.");
+    return;
+  }
 
-    try {
-      await axios.post(`${BASE_URL}/signup`, {
+  try {
+    await axios.post(`${BASE_URL}/signup`, {
       username,
       password,
-      security_question: question,
-      security_answer: answer
+      question,
+      answer
+    });
+    alert('Signup successful! You can now log in.');
+    goToLogin();
+  } catch (err) {
+  if (err.response && err.response.data && err.response.data.detail) {
+    setError(`Signup failed: ${err.response.data.detail}`);
+  } else {
+    setError(`Signup failed: ${err.message}`);
+  }
+}
 
-      });
-      alert('Signup successful! You can now log in.');
-      goToLogin();
-    } catch (err) {
-      setError('Username already exists or signup failed.');
-    }
-  };
+};
+
 
   return (
     <div style={{ padding: '20px', textAlign: 'center', marginTop: '50px' }}>
