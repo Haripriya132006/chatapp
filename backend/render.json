@@ -1,0 +1,26 @@
+{
+  "services": [
+    {
+      "type": "web",
+      "name": "chatapp-backend",
+      "env": "python",
+      "plan": "free",
+      "buildCommand": "",
+      "startCommand": "uvicorn main:app --host 0.0.0.0 --port 10000",
+      "autoDeploy": true
+    }
+  ]
+}
+{
+  "services": [
+    {
+      "type": "web",
+      "name": "chatapp-backend",
+      "env": "python",
+      "plan": "free",
+      "buildCommand": "",
+      "startCommand": "uvicorn main:app --host 0.0.0.0 --port 10000",
+      "autoDeploy": true
+    }
+  ]
+}
