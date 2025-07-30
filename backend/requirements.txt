@@ -4,3 +4,4 @@ sqlmodel
 aiosqlite
 bcrypt
 psycopg2-binary
+pymongo
