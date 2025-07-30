@@ -1,127 +1,121 @@
-from fastapi import FastAPI,WebSocket,WebSocketDisconnect,HTTPException,Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session,select
-from db import get_session,engine
-from models import Message,SQLModel,ChatRequest,User
+from db import get_session
+from models import User, Message, ChatRequest
 from typing import Dict
 from pydantic import BaseModel
+from datetime import datetime
+import bcrypt
 
-app=FastAPI()
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-active_connections:Dict[str,WebSocket]={}
+active_connections: Dict[str, WebSocket] = {}
 
-import bcrypt
 
-def hash(plain:str)->str:
-    return bcrypt.hashpw(plain.encode('utf-8'),bcrypt.gensalt()).decode('utf-8')
+def hash(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-def verify_value(plain:str,hashed:str)->bool:
-    return bcrypt.checkpw(plain.encode('utf-8'),hashed.encode('utf-8'))
+
+def verify_value(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
 @app.websocket("/ws/{username}")
-async def chat_ws(websocket:WebSocket,username:str,session:Session=Depends(get_session)):
+async def chat_ws(websocket: WebSocket, username: str):
     await websocket.accept()
-    active_connections[username]=websocket
+    active_connections[username] = websocket
 
-    stmt=select(Message).where(Message.to_user==username,Message.delivered==False)
-    messages=session.exec(stmt).all()
-
-    for msg in messages:
-        await websocket.send_json({
-            "from":msg.from_user,
-            "to":msg.to_user,
-            "text":msg.text,
-            "timestamp":str(msg.timestamp)
-        })
-        msg.delivered=True
-    session.commit()
+    for db in get_session():
+        messages = list(db["messages"].find({"to_user": username, "delivered": False}))
+        for msg in messages:
+            await websocket.send_json(msg)
+            db["messages"].update_one({"_id": msg["_id"]}, {"$set": {"delivered": True}})
 
     try:
         while True:
-            data=await websocket.receive_json()
-            message=Message(
-                from_user=username,
-                to_user=data["to"],
-                text=data["text"]
-            )
+            data = await websocket.receive_json()
+            message = {
+                "from_user": username,
+                "to_user": data["to"],
+                "text": data["text"],
+                "timestamp": datetime.utcnow(),
+                "delivered": False
+            }
 
-            session.add(message)
-            session.commit()
-            session.refresh(message)
+            for db in get_session():
+                db["messages"].insert_one(message)
 
             if data["to"] in active_connections:
-                await active_connections[data["to"]].send_json({
-                    "from":username,
-                    "to":data["to"],
-                    "text":data["text"],
-                    "timestamp":str(message.timestamp)
-                })
-
-                message.delivered=True
-                session.commit()
+                await active_connections[data["to"]].send_json(message)
+                message["delivered"] = True
+                for db in get_session():
+                    db["messages"].update_one({"_id": message["_id"]}, {"$set": {"delivered": True}})
 
     except WebSocketDisconnect:
         del active_connections[username]
+
 
 @app.get("/")
 def root():
     return {"status": "ChatApp API is running"}
 
+
 @app.get("/history/{user1}/{user2}")
-def det_history(user1:str,user2:str,session:Session=Depends(get_session)):
-    stmt=select(Message).where(
-        ((Message.from_user == user1) & (Message.to_user==user2))|
-        ((Message.from_user == user2) & (Message.to_user == user1))
-    ).order_by(Message.timestamp)
-    return session.exec(stmt).all()
+def det_history(user1: str, user2: str):
+    for db in get_session():
+        messages = list(db["messages"].find({
+            "$or": [
+                {"from_user": user1, "to_user": user2},
+                {"from_user": user2, "to_user": user1}
+            ]
+        }).sort("timestamp"))
+        return messages
 
 
 class ChatRequestBody(BaseModel):
     from_user: str
     to_user: str
 
+
 @app.post("/request-chat")
-def request_chat(data: ChatRequestBody, session: Session = Depends(get_session)):
-    request = ChatRequest(from_user=data.from_user, to_user=data.to_user)
-    session.add(request)
-    session.commit()
+def request_chat(data: ChatRequestBody):
+    request = data.model_dump()
+    request["status"] = "pending"
+    for db in get_session():
+        db["chatrequests"].insert_one(request)
     return {"msg": "Request sent"}
 
 
 @app.get("/pending-requests/{username}")
-def get_requests(username:str,session:Session=Depends(get_session)):
-    stmt=select(ChatRequest).where(ChatRequest.to_user==username,ChatRequest.status=="pending")
-    return session.exec(stmt).all()
+def get_requests(username: str):
+    for db in get_session():
+        return list(db["chatrequests"].find({"to_user": username, "status": "pending"}))
+
 
 class AcceptRequestBody(BaseModel):
     from_user: str
     to_user: str
 
+
 @app.post("/accept-chat")
-def accept_chat(data: AcceptRequestBody, session: Session = Depends(get_session)):
-    stmt = select(ChatRequest).where(
-        ChatRequest.from_user == data.from_user,
-        ChatRequest.to_user == data.to_user,
-        ChatRequest.status == "pending"
-    )
-
-    request = session.exec(stmt).first()
-    if not request:
-        return {"error": "No such request"}
-    
-    request.status = "accepted"
-    session.commit()
-    return {"msg": "Chat accepted"}
-
+def accept_chat(data: AcceptRequestBody):
+    for db in get_session():
+        result = db["chatrequests"].update_one(
+            {"from_user": data.from_user, "to_user": data.to_user, "status": "pending"},
+            {"$set": {"status": "accepted"}}
+        )
+        if result.modified_count:
+            return {"msg": "Chat accepted"}
+        else:
+            return {"error": "No such request"}
 
 
 class UpdateStatusBody(BaseModel):
@@ -129,126 +123,130 @@ class UpdateStatusBody(BaseModel):
     to_user: str
     new_status: str
 
-@app.post("/update-status")
-def update_status(data: UpdateStatusBody, session: Session = Depends(get_session)):
-    stmt = select(ChatRequest).where(
-        ((ChatRequest.from_user == data.from_user) & (ChatRequest.to_user == data.to_user)) |
-        ((ChatRequest.from_user == data.to_user) & (ChatRequest.to_user == data.from_user))
-    )
-    request = session.exec(stmt).first()
-    if not request:
-        raise HTTPException(status_code=404, detail="No existing chat relationship")
 
-    request.status = data.new_status
-    session.commit()
-    return {"msg": f"Status updated to '{data.new_status}'"}
+@app.post("/update-status")
+def update_status(data: UpdateStatusBody):
+    for db in get_session():
+        result = db["chatrequests"].update_one(
+            {"$or": [
+                {"from_user": data.from_user, "to_user": data.to_user},
+                {"from_user": data.to_user, "to_user": data.from_user}
+            ]},
+            {"$set": {"status": data.new_status}}
+        )
+        if result.modified_count:
+            return {"msg": f"Status updated to '{data.new_status}'"}
+        raise HTTPException(status_code=404, detail="No existing chat relationship")
 
 
 @app.get("/users")
-def get_users(session: Session = Depends(get_session)):
-    users = session.exec(select(User)).all()
-    return users
+def get_users():
+    for db in get_session():
+        return list(db["users"].find({}, {"_id": 0}))
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
 
+
 @app.post("/login")
-def login(data: LoginRequest, session: Session = Depends(get_session)):
-    user = session.exec(
-        select(User).where(User.username == data.username)
-    ).first()
+def login(data: LoginRequest):
+    for db in get_session():
+        user = db["users"].find_one({"username": data.username})
+        if not user or not verify_value(data.password, user["password"]):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        return {"message": "Login successful", "username": user["username"]}
 
-    if not user or not verify_value(data.password,user.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return {"message": "Login successful", "username": user.username}
+class SignupRequest(BaseModel):
+    username: str
+    password: str
+    question: str
+    answer: str
 
-class signupRequest(BaseModel):
-    username:str
-    password:str
-    question:str
-    answer:str
 
 @app.post("/signup")
-def signin(data:signupRequest,session:Session=Depends(get_session)):
-    existing=session.exec(select(User).where (User.username==data.username)).first()
-    if existing:
-        raise HTTPException(status_code=400,detail="username already exists")
-    
-    user=User(username=data.username,
-              password=hash(data.password),
-              security_question=data.question,
-              security_answer=hash(data.answer)
-              )
-    
-    session.add(user)
-    session.commit()
-    return {"msg":"user created successfully"}
+def signup(data: SignupRequest):
+    for db in get_session():
+        existing = db["users"].find_one({"username": data.username})
+        if existing:
+            raise HTTPException(status_code=400, detail="Username already exists")
+
+        user = {
+            "username": data.username,
+            "password": hash(data.password),
+            "security_question": data.question,
+            "security_answer": hash(data.answer)
+        }
+        db["users"].insert_one(user)
+        return {"msg": "User created successfully"}
+
 
 class Recovery(BaseModel):
-    username:str
-    answer:str
-    new_password:str
+    username: str
+    answer: str
+    new_password: str
+
 
 @app.get("/recovery-question/{username}")
-def get_security_question(username:str,session:Session=Depends(get_session)):
-    user=session.exec(select(User).where(User.username==username)).first()
-    if not user:
-        raise HTTPException(status_code=404,detail="user not found")
-    return {"question":user.security_question}
+def get_security_question(username: str):
+    for db in get_session():
+        user = db["users"].find_one({"username": username})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {"question": user["security_question"]}
+
 
 @app.post("/reset-password")
-def reset_password(data: Recovery, session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.username == data.username)).first()
+def reset_password(data: Recovery):
+    for db in get_session():
+        user = db["users"].find_one({"username": data.username})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
 
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        if not verify_value(data.answer, user["security_answer"]):
+            raise HTTPException(status_code=401, detail="Incorrect answer")
 
-    # Verify answer
-    if not verify_value(data.answer, user.security_answer):
-        raise HTTPException(status_code=401, detail="Incorrect answer")
+        if data.new_password == "TEMP":
+            return {"msg": "Answer verified"}
 
-    # Just verify answer? (TEMP is a flag)
-    if data.new_password == "TEMP":
-        return {"msg": "Answer verified"}
-
-    # Actually reset the password
-    user.password = hash(data.new_password)
-    session.commit()
-    return {"msg": "Password reset successful"}
+        db["users"].update_one(
+            {"username": data.username},
+            {"$set": {"password": hash(data.new_password)}}
+        )
+        return {"msg": "Password reset successful"}
 
 
 class RejectRequestBody(BaseModel):
     from_user: str
     to_user: str
 
+
 @app.post("/reject-chat")
-def reject_chat(data: RejectRequestBody, session: Session = Depends(get_session)):
-    stmt = select(ChatRequest).where(
-        (ChatRequest.from_user == data.from_user) &
-        (ChatRequest.to_user == data.to_user) &
-        (ChatRequest.status == "pending")
-    )
-    request = session.exec(stmt).first()
-    if not request:
+def reject_chat(data: RejectRequestBody):
+    for db in get_session():
+        result = db["chatrequests"].delete_one({
+            "from_user": data.from_user,
+            "to_user": data.to_user,
+            "status": "pending"
+        })
+        if result.deleted_count:
+            return {"msg": "Request rejected and removed"}
         raise HTTPException(status_code=404, detail="Request not found")
 
-    session.delete(request)
-    session.commit()
-    return {"msg": "Request rejected and removed"}
 
 @app.get("/allowed-users/{username}")
-def get_allowed_users(username: str, session: Session = Depends(get_session)):
-    stmt = select(ChatRequest).where(
-        ((ChatRequest.from_user == username) | (ChatRequest.to_user == username))
-    )
-    requests = session.exec(stmt).all()
-    
-    results = []
-    for r in requests:
-        other_user = r.to_user if r.from_user == username else r.from_user
-        results.append({"user": other_user, "status": r.status})
-    
-    return results
+def get_allowed_users(username: str):
+    for db in get_session():
+        requests = db["chatrequests"].find({
+            "$or": [
+                {"from_user": username},
+                {"to_user": username}
+            ]
+        })
+        results = []
+        for r in requests:
+            other_user = r["to_user"] if r["from_user"] == username else r["from_user"]
+            results.append({"user": other_user, "status": r["status"]})
+        return results
