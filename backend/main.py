@@ -114,7 +114,7 @@ class PendingRequest(BaseModel):
 @app.get("/pending-requests/{username}", response_model=List[PendingRequest])
 def get_requests(username: str):
     db = get_session()
-    return db["chat_requests"]
+    return [db["chat_requests"]]
     # requests = db["chatrequests"].find({"to_user": username, "status": "pending"})
     
     # result = []
