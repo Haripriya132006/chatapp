@@ -54,6 +54,7 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
   const sendMessage = () => {
     if (!text.trim()) return;
     const messageData = {
+      from:currentUser,
       to: chatPartner,
       text: text.trim(),
     };
