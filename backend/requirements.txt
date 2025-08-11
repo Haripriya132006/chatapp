@@ -5,3 +5,4 @@ aiosqlite
 bcrypt
 psycopg2-binary
 pymongo
+certifi
