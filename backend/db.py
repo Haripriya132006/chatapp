@@ -1,11 +1,16 @@
 from pymongo import MongoClient
+import certifi
 
-# Your MongoDB connection string
-DB_URL = "mongodb+srv://meaw:meaw@database.eca1wnf.mongodb.net/?retryWrites=true&w=majority"
+import os
+from pymongo import MongoClient
+from dotenv import load_dotenv
 
+load_dotenv("pass.env")  # specify your env file path
+
+DB_URL = os.getenv("DB_URL")
 def get_session():
-    client = MongoClient(DB_URL)
-    db = client["chatapp"]  # Your database name inside the cluster
+    client = MongoClient(DB_URL, tlsCAFile=certifi.where())  # <- use certifi CA file
+    db = client["chatapp"]
     try:
         yield db
     finally:

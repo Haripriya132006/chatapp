@@ -36,6 +36,7 @@ async def chat_ws(websocket: WebSocket, username: str):
     for db in get_session():
         messages = list(db["messages"].find({"to_user": username, "delivered": False}))
         for msg in messages:
+            msg["_id"] = str(msg["_id"])  # Fix ObjectId
             await websocket.send_json(msg)
             db["messages"].update_one({"_id": msg["_id"]}, {"$set": {"delivered": True}})
 
@@ -46,7 +47,7 @@ async def chat_ws(websocket: WebSocket, username: str):
                 "from_user": username,
                 "to_user": data["to"],
                 "text": data["text"],
-                "timestamp": datetime.utcnow(),
+                "timestamp": datetime.utcnow().isoformat(),
                 "delivered": False
             }
 
@@ -57,7 +58,10 @@ async def chat_ws(websocket: WebSocket, username: str):
                 await active_connections[data["to"]].send_json(message)
                 message["delivered"] = True
                 for db in get_session():
-                    db["messages"].update_one({"_id": message["_id"]}, {"$set": {"delivered": True}})
+                    db["messages"].update_one(
+                        {"from_user": username, "to_user": data["to"], "timestamp": message["timestamp"]},
+                        {"$set": {"delivered": True}}
+                    )
 
     except WebSocketDisconnect:
         del active_connections[username]
@@ -77,7 +81,13 @@ def det_history(user1: str, user2: str):
                 {"from_user": user2, "to_user": user1}
             ]
         }).sort("timestamp"))
+
+        # Remove or convert _id from each message
+        for msg in messages:
+            msg["_id"] = str(msg["_id"])  # Or: del msg["_id"]
+
         return messages
+
 
 
 class ChatRequestBody(BaseModel):
@@ -94,11 +104,15 @@ def request_chat(data: ChatRequestBody):
     return {"msg": "Request sent"}
 
 
+from bson import ObjectId  # At the top if not already
+
 @app.get("/pending-requests/{username}")
 def get_requests(username: str):
     for db in get_session():
-        return list(db["chatrequests"].find({"to_user": username, "status": "pending"}))
-
+        requests = list(db["chatrequests"].find({"to_user": username, "status": "pending"}))
+        for r in requests:
+            r["_id"] = str(r["_id"])  # OR use del r["_id"] if you want to remove it
+        return requests
 
 class AcceptRequestBody(BaseModel):
     from_user: str
