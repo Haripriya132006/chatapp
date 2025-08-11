@@ -39,6 +39,7 @@ function RequestPanel({ currentUser, setChatPartner, setUserName }) {
     });
     alert("Request sent");
     setNewUser("");
+    fetchPendingRequests();
   };
 
   const acceptRequest = async (fromUser) => {
