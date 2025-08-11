@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 
-const BASE_URL = "https://chatapp.up.railway.app";
+const BASE_URL = "https://chatapp-yc2g.onrender.com";
 
 function ChatWindow({ currentUser, chatPartner, goBack }) {
   const [messages, setMessages] = useState([]);
@@ -14,8 +14,13 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
     // 1. Fetch message history
     axios.get(`${BASE_URL}/history/${currentUser}/${chatPartner}`)
       .then((res) => {
-        // Sort by timestamp if needed
-        const sorted = res.data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        // Normalize message keys
+        const normalized = res.data.map((msg) => ({
+          ...msg,
+          from: msg.from || msg.from_user,
+          to: msg.to || msg.to_user,
+        }));
+        const sorted = normalized.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         setMessages(sorted);
       });
 
@@ -23,15 +28,22 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
     ws.current = new WebSocket(`ws://localhost:8000/ws/${currentUser}`);
 
     ws.current.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      const participants = [message.from, message.to];
-      if (participants.includes(chatPartner)) {
+      const raw = JSON.parse(event.data);
+      const message = {
+        from: raw.from || raw.from_user,
+        to: raw.to || raw.to_user,
+        text: raw.text,
+        timestamp: raw.timestamp,
+        _id: raw._id,
+      };
+
+      if ([message.from, message.to].includes(chatPartner)) {
         setMessages((prev) => [...prev, message]);
       }
     };
 
     return () => {
-      ws.current.close();
+      ws.current?.close();
     };
   }, [chatPartner, currentUser]);
 
@@ -60,14 +72,6 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
     setText("");
   };
 
-  const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
-    return `${date.getHours().toString().padStart(2, '0')}:${date
-      .getMinutes()
-      .toString()
-      .padStart(2, '0')}`;
-  };
-
   return (
     <div style={{ padding: "20px" }}>
       <h2>
@@ -87,46 +91,42 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
           backgroundColor: "#f9f9f9",
         }}
       >
-
-{messages.map((msg, index) => {
-  // Handles both real-time messages (msg.from) and history messages (msg.from_user)
-  const sender = msg.from || msg.from_user;
-  const alignRight = sender === currentUser;
-
-  return (
-    <div
-      key={index}
-      style={{
-        textAlign: alignRight ? "right" : "left",
-        marginBottom: "10px",
-      }}
-    >
-      <div
-        style={{
-          display: "inline-block",
-          padding: "8px 12px",
-          borderRadius: "8px",
-          backgroundColor: alignRight ? "#d1e7dd" : "#f8d7da",
-          maxWidth: "70%",
-        }}
-      >
-        <div style={{ fontWeight: "bold", marginBottom: "4px" }}>{sender}</div>
-        <div>{msg.text}</div>
-        <div
-          style={{
-            fontSize: "0.75rem",
-            marginTop: "4px",
-            textAlign: "right",
-            color: "#555",
-          }}
-        >
-          {new Date(msg.timestamp).toLocaleString()}
-        </div>
-      </div>
-    </div>
-  );
-})}
-
+        {messages.map((msg, index) => {
+          const sender = msg.from;
+          const alignRight = sender === currentUser;
+          return (
+            <div
+              key={msg._id || index}
+              style={{
+                textAlign: alignRight ? "right" : "left",
+                marginBottom: "10px",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  backgroundColor: alignRight ? "#d1e7dd" : "#f8d7da",
+                  maxWidth: "70%",
+                }}
+              >
+                <div style={{ fontWeight: "bold", marginBottom: "4px" }}>{sender}</div>
+                <div>{msg.text}</div>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    marginTop: "4px",
+                    textAlign: "right",
+                    color: "#555",
+                  }}
+                >
+                  {new Date(msg.timestamp).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          );
+        })}
 
         <div ref={bottomRef} />
       </div>

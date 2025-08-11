@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const BASE_URL = "https://chatapp.up.railway.app";
+const BASE_URL = "https://chatapp-yc2g.onrender.com";
 
 function Signin({ goToLogin }) {
   const [username, setUsername] = useState('');
