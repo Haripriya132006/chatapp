@@ -114,17 +114,19 @@ class PendingRequest(BaseModel):
 @app.get("/pending-requests/{username}", response_model=List[PendingRequest])
 def get_requests(username: str):
     db = get_session()
-    requests = db["chatrequests"].find({"to_user": username, "status": "pending"})
+    if (db):
+        return "meawww"
+    # requests = db["chatrequests"].find({"to_user": username, "status": "pending"})
     
-    result = []
-    for r in requests:
-        result.append(PendingRequest(
-            from_user=r["from_user"],
-            to_user=r["to_user"],
-            status=r["status"]
-        ))
+    # result = []
+    # for r in requests:
+        # result.append(PendingRequest(
+            # from_user=r["from_user"],
+            # to_user=r["to_user"],
+            # status=r["status"]
+        # ))
     
-    return result
+    # return result
 
 class AcceptRequestBody(BaseModel):
     from_user: str
