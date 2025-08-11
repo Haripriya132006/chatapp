@@ -116,7 +116,7 @@ def get_requests(username: str):
     # db = get_session()
 
     for db in get_session():
-        return list(db["chatrequests"].find({}, {"_id": 0}))
+        return list(db["chatrequests"].find({"to_user": username, "status": "pending"}, {"_id": 0}))
 
     # print(db.list_collection_names())
 
