@@ -106,13 +106,25 @@ def request_chat(data: ChatRequestBody):
 
 from bson import ObjectId  # At the top if not already
 
-@app.get("/pending-requests/{username}")
+class PendingRequest(BaseModel):
+    from_user: str
+    to_user: str
+    status: str
+
+@app.get("/pending-requests/{username}", response_model=List[PendingRequest])
 def get_requests(username: str):
-    for db in get_session():
-        requests = list(db["chatrequests"].find({"to_user": username, "status": "pending"}))
-        for r in requests:
-            r["_id"] = str(r["_id"])  # OR use del r["_id"] if you want to remove it
-        return requests
+    db = get_session()
+    requests = db["chatrequests"].find({"to_user": username, "status": "pending"})
+    
+    result = []
+    for r in requests:
+        result.append(PendingRequest(
+            from_user=r["from_user"],
+            to_user=r["to_user"],
+            status=r["status"]
+        ))
+    
+    return result
 
 class AcceptRequestBody(BaseModel):
     from_user: str
