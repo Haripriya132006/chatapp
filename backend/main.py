@@ -112,7 +112,7 @@ class PendingRequest(BaseModel):
     status: str
 
 @app.get("/pending-requests/{username}")
-def get_requests(data:PendingRequest):
+def get_requests(username: str):
     # db = get_session()
     return {"meaw":"meawwww"}
     # return {db["chat_requests"]}
