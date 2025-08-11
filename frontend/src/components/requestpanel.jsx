@@ -100,8 +100,8 @@ function RequestPanel({ currentUser, setChatPartner, setUserName }) {
         {pendingRequests.length === 0 ? (
           <p>No pending requests</p>
         ) : (
-          pendingRequests.map((req) => (
-            <div key={req.id} style={{ marginBottom: "10px" }}>
+          pendingRequests.map((req,index) => (
+            <div key={index} style={{ marginBottom: "10px" }}>
               {req.from_user}
               <button
                 style={{ marginLeft: "10px" }}
