@@ -28,19 +28,29 @@ def verify_value(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
+from fastapi import WebSocket, WebSocketDisconnect
+from datetime import datetime
+from bson import ObjectId
+from db import get_session
+
+# Active WebSocket connections (username -> WebSocket object)
+active_connections = {}
+
 @app.websocket("/ws/{username}")
 async def chat_ws(websocket: WebSocket, username: str):
     await websocket.accept()
     active_connections[username] = websocket
+    print(f"✅ WS connected: {username}")
 
-    # Send any undelivered messages to this user and mark them delivered
+    # Send any undelivered messages for this user
     for db in get_session():
-        messages = list(db["messages"].find({"to_user": username, "delivered": False}))
-        for msg in messages:
-            msg["_id"] = str(msg["_id"])  # Convert ObjectId
+        undelivered = list(db["messages"].find({"to_user": username, "delivered": False}))
+        for msg in undelivered:
+            oid = msg["_id"]                # Keep original ObjectId for DB update
+            msg["_id"] = str(oid)           # Convert to string for sending to frontend
             await websocket.send_json(msg)
             db["messages"].update_one(
-                {"_id": msg["_id"]},
+                {"_id": oid},
                 {"$set": {"delivered": True}}
             )
 
@@ -48,31 +58,46 @@ async def chat_ws(websocket: WebSocket, username: str):
         while True:
             # Wait for a message from the frontend
             data = await websocket.receive_json()
+            print(f"📩 Received from {username}: {data}")
+
+            to_user = data.get("to")
+            text = data.get("text")
+
+            if not to_user or not text:
+                print("⚠️ Invalid WS payload (missing 'to' or 'text'), skipping")
+                continue
+
             message = {
                 "from_user": username,
-                "to_user": data["to"],
-                "text": data["text"],
+                "to_user": to_user,
+                "text": text,
                 "timestamp": datetime.utcnow().isoformat(),
                 "delivered": False
             }
 
-            # Save to database
+            # Save message to DB
             for db in get_session():
-                db["messages"].insert_one(message)
+                res = db["messages"].insert_one(message)
+                print(f"✅ Inserted into DB with _id: {res.inserted_id}")
 
-            # If recipient is online, send directly and mark delivered
-            if data["to"] in active_connections:
-                await active_connections[data["to"]].send_json(message)
+            # Send in real‑time if recipient is online
+            if to_user in active_connections:
+                await active_connections[to_user].send_json(message)
                 message["delivered"] = True
                 for db in get_session():
                     db["messages"].update_one(
-                        {"from_user": username, "to_user": data["to"], "timestamp": message["timestamp"]},
+                        {
+                            "from_user": username,
+                            "to_user": to_user,
+                            "timestamp": message["timestamp"]
+                        },
                         {"$set": {"delivered": True}}
                     )
 
     except WebSocketDisconnect:
-        del active_connections[username]
-
+        print(f"⚠️ WS disconnected: {username}")
+        if username in active_connections:
+            del active_connections[username]
 
 @app.get("/")
 def root():
