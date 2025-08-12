@@ -8,3 +8,4 @@ pymongo
 certifi
 python-dotenv
 dotenv
+uvicorn[standard]
