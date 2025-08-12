@@ -25,7 +25,9 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
       });
 
     // 2. Setup WebSocket connection
-    ws.current = new WebSocket(`ws://localhost:8000/ws/${currentUser}`);
+    // ws.current = new WebSocket(`ws://localhost:8000/ws/${currentUser}`);
+    ws.current = new WebSocket(`ws://chatapp-yc2g.onrender.com/ws/${currentUser}`);
+
 
     ws.current.onmessage = (event) => {
       const raw = JSON.parse(event.data);
