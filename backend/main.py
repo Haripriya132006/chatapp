@@ -33,15 +33,20 @@ async def chat_ws(websocket: WebSocket, username: str):
     await websocket.accept()
     active_connections[username] = websocket
 
+    # Send any undelivered messages to this user and mark them delivered
     for db in get_session():
         messages = list(db["messages"].find({"to_user": username, "delivered": False}))
         for msg in messages:
-            msg["_id"] = str(msg["_id"])  # Fix ObjectId
+            msg["_id"] = str(msg["_id"])  # Convert ObjectId
             await websocket.send_json(msg)
-            db["messages"].update_one({"_id": msg["_id"]}, {"$set": {"delivered": True}})
+            db["messages"].update_one(
+                {"_id": msg["_id"]},
+                {"$set": {"delivered": True}}
+            )
 
     try:
         while True:
+            # Wait for a message from the frontend
             data = await websocket.receive_json()
             message = {
                 "from_user": username,
@@ -51,9 +56,11 @@ async def chat_ws(websocket: WebSocket, username: str):
                 "delivered": False
             }
 
+            # Save to database
             for db in get_session():
                 db["messages"].insert_one(message)
 
+            # If recipient is online, send directly and mark delivered
             if data["to"] in active_connections:
                 await active_connections[data["to"]].send_json(message)
                 message["delivered"] = True
@@ -106,36 +113,16 @@ def request_chat(data: ChatRequestBody):
 
 from bson import ObjectId  # At the top if not already
 
-class PendingRequest(BaseModel):
-    from_user: str
-    to_user: str
-    status: str
+
 
 @app.get("/pending-requests/{username}")
 def get_requests(username: str):
-    # db = get_session()
-
     for db in get_session():
         return list(db["chatrequests"].find({"to_user": username, "status": "pending"}, {"_id": 0}))
-
-    # print(db.list_collection_names())
-
-    # requests = db["chatrequests"].find({"to_user": username, "status": "pending"})
-    # return {"meaw":"meawww"}
-    # result = []
-    # for r in requests:
-        # result.append(PendingRequest(
-            # from_user=r["from_user"],
-            # to_user=r["to_user"],
-            # status=r["status"]
-        # ))
-    
-    # return result
 
 class AcceptRequestBody(BaseModel):
     from_user: str
     to_user: str
-
 
 @app.post("/accept-chat")
 def accept_chat(data: AcceptRequestBody):
