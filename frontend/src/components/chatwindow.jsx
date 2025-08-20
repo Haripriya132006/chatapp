@@ -52,7 +52,7 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
     return () => {
       ws.current?.close();
     };
-  }, [currentUser, chatPartner]); // keep chatPartner dependency to filter incoming messages
+  }, [currentUser]); 
 
   // Scroll to bottom on new message
   useEffect(() => {
