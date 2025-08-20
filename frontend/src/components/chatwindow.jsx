@@ -28,7 +28,7 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
 
   // Create WebSocket once per currentUser
   useEffect(() => {
-    ws.current = new WebSocket(`wss://chatapp-yc2g.onrender.com/ws/${currentUser}`);
+    ws.current = new WebSocket(`wss://chatapp-yc2g.onrender.com/wss/${currentUser}`);
 
     ws.current.onmessage = event => {
       const raw = JSON.parse(event.data);
