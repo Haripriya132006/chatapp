@@ -36,7 +36,7 @@ from db import get_session
 # Active WebSocket connections (username -> WebSocket object)
 active_connections = {}
 
-@app.websocket("/ws/{username}")
+@app.websocket("/wss/{username}")
 async def chat_ws(websocket: WebSocket, username: str):
     await websocket.accept()
     active_connections[username] = websocket
