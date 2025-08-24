@@ -78,26 +78,28 @@ async def chat_ws(websocket: WebSocket, username: str):
             # Save message to DB
             for db in get_session():
                 res = db["messages"].insert_one(message)
+                message["_id"] = str(res.inserted_id)   # include _id for frontend
                 print(f"✅ Inserted into DB with _id: {res.inserted_id}")
 
-            # Send in real‑time if recipient is online
+            # Send to recipient in real-time if online
             if to_user in active_connections:
                 await active_connections[to_user].send_json(message)
                 message["delivered"] = True
                 for db in get_session():
                     db["messages"].update_one(
-                        {
-                            "from_user": username,
-                            "to_user": to_user,
-                            "timestamp": message["timestamp"]
-                        },
+                        {"_id": res.inserted_id},
                         {"$set": {"delivered": True}}
                     )
+
+            # 🔹 Always echo back to sender as confirmation
+            if username in active_connections:
+                await active_connections[username].send_json(message)
 
     except WebSocketDisconnect:
         print(f"⚠️ WS disconnected: {username}")
         if username in active_connections:
             del active_connections[username]
+
 
 @app.get("/")
 def root():
