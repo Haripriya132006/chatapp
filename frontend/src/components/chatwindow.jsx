@@ -52,7 +52,7 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
     return () => {
       ws.current?.close();
     };
-  }, [currentUser]); 
+  }, [currentUser,chatPartner]); 
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -68,16 +68,7 @@ function ChatWindow({ currentUser, chatPartner, goBack }) {
       text: text.trim(),
     };
 
-    // Send via WebSocket
     ws.current.send(JSON.stringify(messageData));
-
-    // Optimistically update UI
-    const localTimestamp = new Date().toISOString();
-    setMessages(prev => [
-      ...prev,
-      { ...messageData, timestamp: localTimestamp },
-    ]);
-
     setText("");
   };
 
